@@ -1,39 +1,40 @@
-// Package Bittrex is an implementation of the Biitrex API in Golang.
+// Package bittrex is an implementation of the Biitrex API in Golang.
 package bittrex
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/shopspring/decimal"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
-	API_BASE    = "https://bittrex.com/api/" // Bittrex API endpoint
-	API_VERSION = "v1.1"
-	WS_BASE     = "socket.bittrex.com" // Bittrex WS API endpoint
-	WS_HUB      = "CoreHub"            // SignalR main hub
+	apiBase    = "https://bittrex.com/api/" // Bittrex API endpoint
+	apiVersion = "v1.1"
+	wsBase     = "socket.bittrex.com" // Bittrex WS API endpoint
+	wsHub      = "CoreHub"            // SignalR main hub
 )
 
 // New returns an instantiated bittrex struct
 func New(apiKey, apiSecret string) *Bittrex {
-	client := NewClient(apiKey, apiSecret)
+	client := newClient(apiKey, apiSecret)
 	return &Bittrex{client}
 }
 
-// NewWithCustomHttpClient returns an instantiated bittrex struct with custom http client
-func NewWithCustomHttpClient(apiKey, apiSecret string, httpClient *http.Client) *Bittrex {
-	client := NewClientWithCustomHttpConfig(apiKey, apiSecret, httpClient)
+// NewWithCustomHTTPClient returns an instantiated bittrex struct with custom http client
+func NewWithCustomHTTPClient(apiKey, apiSecret string, httpClient *http.Client) *Bittrex {
+	client := newClientWithCustomHTTPConfig(apiKey, apiSecret, httpClient)
 	return &Bittrex{client}
 }
 
 // NewWithCustomTimeout returns an instantiated bittrex struct with custom timeout
 func NewWithCustomTimeout(apiKey, apiSecret string, timeout time.Duration) *Bittrex {
-	client := NewClientWithCustomTimeout(apiKey, apiSecret, timeout)
+	client := newClientWithCustomTimeout(apiKey, apiSecret, timeout)
 	return &Bittrex{client}
 }
 
@@ -45,14 +46,14 @@ func handleErr(r jsonResponse) error {
 	return nil
 }
 
-// bittrex represent a bittrex client
+// Bittrex represent a bittrex client
 type Bittrex struct {
 	client *client
 }
 
-// set enable/disable http request/response dump
-func (c *Bittrex) SetDebug(enable bool) {
-	c.client.debug = enable
+// SetDebug enable/disable http request/response dump
+func (b *Bittrex) SetDebug(enable bool) {
+	b.client.debug = enable
 }
 
 // GetDistribution is used to get the distribution.
@@ -193,7 +194,7 @@ func (b *Bittrex) GetOrderBook(market, cat string) (orderBook OrderBook, err err
 // GetOrderBookBuySell is used to get retrieve the buy or sell side of an orderbook for a given market
 // market: a string literal for the market (ex: BTC-LTC)
 // cat: buy or sell to identify the type of orderbook to return.
-func (b *Bittrex) GetOrderBookBuySell(market, cat string) (orderb []Orderb, err error) {
+func (b *Bittrex) GetOrderBookBuySell(market, cat string) (orderb []OrderBookOrder, err error) {
 	if cat != "buy" && cat != "sell" {
 		cat = "buy"
 	}
@@ -246,9 +247,9 @@ func (b *Bittrex) BuyLimit(market string, quantity, rate decimal.Decimal) (uuid 
 	if err = handleErr(response); err != nil {
 		return
 	}
-	var u Uuid
+	var u UUID
 	err = json.Unmarshal(response.Result, &u)
-	uuid = u.Id
+	uuid = u.ID
 	return
 }
 
@@ -265,9 +266,9 @@ func (b *Bittrex) SellLimit(market string, quantity, rate decimal.Decimal) (uuid
 	if err = handleErr(response); err != nil {
 		return
 	}
-	var u Uuid
+	var u UUID
 	err = json.Unmarshal(response.Result, &u)
-	uuid = u.Id
+	uuid = u.ID
 	return
 }
 
@@ -288,7 +289,7 @@ func (b *Bittrex) CancelOrder(orderID string) (err error) {
 // GetOpenOrders returns orders that you currently have opened.
 // If market is set to "all", GetOpenOrders return all orders
 // If market is set to a specific order, GetOpenOrders return orders for this market
-func (b *Bittrex) GetOpenOrders(market string) (openOrders []Order, err error) {
+func (b *Bittrex) GetOpenOrders(market string) (openOrders []OrderSimple, err error) {
 	resource := "market/getopenorders"
 	if market != "all" {
 		resource += "?market=" + strings.ToUpper(market)
@@ -327,7 +328,7 @@ func (b *Bittrex) GetBalances() (balances []Balance, err error) {
 	return
 }
 
-// Getbalance is used to retrieve the balance from your account for a specific currency.
+// GetBalance is used to retrieve the balance from your account for a specific currency.
 // currency: a string literal for the currency (ex: LTC)
 func (b *Bittrex) GetBalance(currency string) (balance Balance, err error) {
 	r, err := b.client.do("GET", "account/getbalance?currency="+strings.ToUpper(currency), "", true)
@@ -367,7 +368,7 @@ func (b *Bittrex) GetDepositAddress(currency string) (address Address, err error
 // address string the address where to send the funds.
 // currency string literal for the currency (ie. BTC)
 // quantity decimal.Decimal the quantity of coins to withdraw
-func (b *Bittrex) Withdraw(address, currency string, quantity decimal.Decimal) (withdrawUuid string, err error) {
+func (b *Bittrex) Withdraw(address, currency string, quantity decimal.Decimal) (withdrawUUID string, err error) {
 	r, err := b.client.do("GET", fmt.Sprintf("account/withdraw?currency=%s&quantity=%s&address=%s", strings.ToUpper(currency), quantity, address), "", true)
 	if err != nil {
 		return
@@ -379,15 +380,15 @@ func (b *Bittrex) Withdraw(address, currency string, quantity decimal.Decimal) (
 	if err = handleErr(response); err != nil {
 		return
 	}
-	var u Uuid
+	var u UUID
 	err = json.Unmarshal(response.Result, &u)
-	withdrawUuid = u.Id
+	withdrawUUID = u.ID
 	return
 }
 
 // GetOrderHistory used to retrieve your order history.
 // market string literal for the market (ie. BTC-LTC). If set to "all", will return for all market
-func (b *Bittrex) GetOrderHistory(market string) (orders []Order, err error) {
+func (b *Bittrex) GetOrderHistory(market string) (orders []OrderSimple, err error) {
 	resource := "account/getorderhistory"
 	if market != "all" {
 		resource += "?market=" + market
@@ -451,9 +452,10 @@ func (b *Bittrex) GetDepositHistory(currency string) (deposits []Deposit, err er
 	return
 }
 
-func (b *Bittrex) GetOrder(order_uuid string) (order Order2, err error) {
+// GetOrder .
+func (b *Bittrex) GetOrder(OrderUUID string) (order Order, err error) {
 
-	resource := "account/getorder?uuid=" + order_uuid
+	resource := "account/getorder?uuid=" + OrderUUID
 
 	r, err := b.client.do("GET", resource, "", true)
 	if err != nil {
@@ -473,7 +475,7 @@ func (b *Bittrex) GetOrder(order_uuid string) (order Order2, err error) {
 // GetTicks is used to get ticks history values for a market.
 // Interval can be -> ["oneMin", "fiveMin", "thirtyMin", "hour", "day"]
 func (b *Bittrex) GetTicks(market string, interval string) ([]Candle, error) {
-	_, ok := CANDLE_INTERVALS[interval]
+	_, ok := CandleIntervals[interval]
 	if !ok {
 		return nil, errors.New("wrong interval")
 	}
@@ -506,7 +508,7 @@ func (b *Bittrex) GetTicks(market string, interval string) ([]Candle, error) {
 
 // GetLatestTick returns array with a single element latest candle object
 func (b *Bittrex) GetLatestTick(market string, interval string) ([]Candle, error) {
-	_, ok := CANDLE_INTERVALS[interval]
+	_, ok := CandleIntervals[interval]
 	if !ok {
 		return nil, errors.New("wrong interval")
 	}

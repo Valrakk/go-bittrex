@@ -23,12 +23,12 @@ type client struct {
 }
 
 // NewClient return a new Bittrex HTTP client
-func NewClient(apiKey, apiSecret string) (c *client) {
+func newClient(apiKey, apiSecret string) (c *client) {
 	return &client{apiKey, apiSecret, &http.Client{}, 30 * time.Second, false}
 }
 
-// NewClientWithCustomHttpConfig returns a new Bittrex HTTP client using the predefined http client
-func NewClientWithCustomHttpConfig(apiKey, apiSecret string, httpClient *http.Client) (c *client) {
+// NewClientWithCustomHTTPConfig returns a new Bittrex HTTP client using the predefined http client
+func newClientWithCustomHTTPConfig(apiKey, apiSecret string, httpClient *http.Client) (c *client) {
 	timeout := httpClient.Timeout
 	if timeout <= 0 {
 		timeout = 30 * time.Second
@@ -36,8 +36,8 @@ func NewClientWithCustomHttpConfig(apiKey, apiSecret string, httpClient *http.Cl
 	return &client{apiKey, apiSecret, httpClient, timeout, false}
 }
 
-// NewClient returns a new Bittrex HTTP client with custom timeout
-func NewClientWithCustomTimeout(apiKey, apiSecret string, timeout time.Duration) (c *client) {
+// NewClientWithCustomTimeout returns a new Bittrex HTTP client with custom timeout
+func newClientWithCustomTimeout(apiKey, apiSecret string, timeout time.Duration) (c *client) {
 	return &client{apiKey, apiSecret, &http.Client{}, timeout, false}
 }
 
@@ -102,7 +102,7 @@ func (c *client) do(method string, resource string, payload string, authNeeded b
 	if strings.HasPrefix(resource, "http") {
 		rawurl = resource
 	} else {
-		rawurl = fmt.Sprintf("%s%s/%s", API_BASE, API_VERSION, resource)
+		rawurl = fmt.Sprintf("%s%s/%s", apiBase, apiVersion, resource)
 	}
 
 	req, err := http.NewRequest(method, rawurl, strings.NewReader(payload))

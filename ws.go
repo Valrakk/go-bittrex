@@ -5,27 +5,53 @@ import (
 	"errors"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"github.com/thebotguys/signalr"
 )
 
+// OrderUpdate are the changes in the order book
 type OrderUpdate struct {
-	Orderb
-	Type int
+	Quantity decimal.Decimal `json:"Quantity"`
+	Rate     decimal.Decimal `json:"Rate"`
+	Type     int             `json:"Type"`
 }
 
+// InitialFill is used for the first update frame
+type InitialFill struct {
+	ID        int             `json:"Id"`
+	Timestamp jTime           `json:"Timestamp"`
+	Quantity  decimal.Decimal `json:"Quantity"`
+	Price     decimal.Decimal `json:"Price"`
+	Total     decimal.Decimal `json:"Total"`
+	FillType  string          `json:"FillType"`
+	OrderType string          `json:"OrderType"`
+}
+
+// Fill are the executed orders
 type Fill struct {
-	Orderb
-	OrderType string
-	Timestamp jTime
+	OrderType string          `json:"OrderType"`
+	Quantity  decimal.Decimal `json:"Quantity"`
+	Rate      decimal.Decimal `json:"Rate"`
+	Timestamp jTime           `json:"Timestamp"`
 }
 
 // ExchangeState contains fills and order book updates for a market.
 type ExchangeState struct {
-	MarketName string
-	Nounce     int
-	Buys       []OrderUpdate
-	Sells      []OrderUpdate
-	Fills      []Fill
+	MarketName string        `json:"MarketName"`
+	Nounce     int           `json:"Nounce"`
+	Buys       []OrderUpdate `json:"Buys"`
+	Sells      []OrderUpdate `json:"Sells"`
+	Fills      []Fill        `json:"Fills"`
+	Initial    bool
+}
+
+// InitialExchangeState contains the initial fills and order book updates for a market.
+type InitialExchangeState struct {
+	MarketName string        `json:"MarketName"`
+	Nounce     int           `json:"Nounce"`
+	Buys       []OrderUpdate `json:"Buys"`
+	Sells      []OrderUpdate `json:"Sells"`
+	Fills      []InitialFill `json:"Fills"`
 	Initial    bool
 }
 
@@ -60,11 +86,11 @@ func sendStateAsync(dataCh chan<- ExchangeState, st ExchangeState) {
 }
 
 func subForMarket(client *signalr.Client, market string) (json.RawMessage, error) {
-	_, err := client.CallHub(WS_HUB, "SubscribeToExchangeDeltas", market)
+	_, err := client.CallHub(wsHub, "SubscribeToExchangeDeltas", market)
 	if err != nil {
 		return json.RawMessage{}, err
 	}
-	return client.CallHub(WS_HUB, "QueryExchangeState", market)
+	return client.CallHub(wsHub, "QueryExchangeState", market)
 }
 
 func parseStates(messages []json.RawMessage, dataCh chan<- ExchangeState, market string) {
@@ -87,13 +113,13 @@ func (b *Bittrex) SubscribeExchangeUpdate(market string, dataCh chan<- ExchangeS
 	const timeout = 5 * time.Second
 	client := signalr.NewWebsocketClient()
 	client.OnClientMethod = func(hub string, method string, messages []json.RawMessage) {
-		if hub != WS_HUB || method != "updateExchangeState" {
+		if hub != wsHub || method != "updateExchangeState" {
 			return
 		}
 		parseStates(messages, dataCh, market)
 	}
 	err := doAsyncTimeout(func() error {
-		return client.Connect("https", WS_BASE, []string{WS_HUB})
+		return client.Connect("https", wsBase, []string{wsHub})
 	}, func(err error) {
 		if err == nil {
 			client.Close()
@@ -112,12 +138,31 @@ func (b *Bittrex) SubscribeExchangeUpdate(market string, dataCh chan<- ExchangeS
 	if err != nil {
 		return err
 	}
+	var ist InitialExchangeState
 	var st ExchangeState
-	if err = json.Unmarshal(msg, &st); err != nil {
+	if err = json.Unmarshal(msg, &ist); err != nil {
 		return err
 	}
+
 	st.Initial = true
 	st.MarketName = market
+	st.Buys = make([]OrderUpdate, len(ist.Buys))
+	st.Sells = make([]OrderUpdate, len(ist.Sells))
+	st.Fills = make([]Fill, len(ist.Fills))
+
+	for i := range ist.Buys {
+		st.Buys[i] = ist.Buys[i]
+	}
+	for i := range ist.Sells {
+		st.Sells[i] = ist.Sells[i]
+	}
+	for i := range ist.Fills {
+		st.Fills[i].OrderType = ist.Fills[i].OrderType
+		st.Fills[i].Quantity = ist.Fills[i].Quantity
+		st.Fills[i].Rate = ist.Fills[i].Price
+		st.Fills[i].Timestamp = ist.Fills[i].Timestamp
+	}
+
 	sendStateAsync(dataCh, st)
 	select {
 	case <-stop:
